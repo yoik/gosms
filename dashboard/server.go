@@ -31,10 +31,13 @@ type SMSDataResponse struct {
 type SMSMessageResponse struct {
 	Status   int            `json:"status"`
 	Message  string         `json:"message"`
-	Messages []gosms.SMS    `json:"messages"`
+	Attempt gosms.SMS       `json:"attempt"`
 }
 
-SMSMessageResponse
+type HeartbeatResponse struct {
+	Status   int            `json:"status"`
+	Message  string         `json:"message"`
+}
 
 // Cache templates
 var templates = template.Must(template.ParseFiles("./templates/index.html"))
@@ -76,7 +79,7 @@ func sendSMSHandler(w http.ResponseWriter, r *http.Request) {
 	sms := &gosms.SMS{UUID: uuid.String(), Mobile: mobile, Body: message, Retries: 0}
 	gosms.EnqueueMessage(sms, true)
 
-	smsresp := SMSResponse{Status: 200, Message: "ok", UUID: uuid}
+	smsresp := SMSResponse{Status: 200, Message: "ok", UUID: uuid.String()}
 	var toWrite []byte
 	toWrite, err := json.Marshal(smsresp)
 	if err != nil {
@@ -112,15 +115,31 @@ func getLogsHandler(w http.ResponseWriter, r *http.Request) {
 // dumps JSON data, used by log view. Methods allowed: GET
 func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("--- getMessageHandler")
+
 	r.ParseForm()
 	uuid := r.FormValue("uuid")
-	query := fmt.Sprintf("WHERE uuid=%v", uuid)
+	query := fmt.Sprintf("WHERE uuid='%v'", uuid)
 
-	messages, _ := gosms.GetMessages(query)
+	attempt, _ := gosms.GetMessages(query)
 	logs := SMSMessageResponse{
 		Status:   200,
 		Message:  "ok",
-		Messages: messages,
+		Attempt: attempt[0],
+	}
+	var toWrite []byte
+	toWrite, err := json.Marshal(logs)
+	if err != nil {
+		log.Println(err)
+		//lets just depend on the server to raise 500
+	}
+	w.Header().Set("Content-type", "application/json")
+	w.Write(toWrite)
+}
+
+func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
+	logs := HeartbeatResponse{
+		Status:   200,
+		Message:  "ok",
 	}
 	var toWrite []byte
 	toWrite, err := json.Marshal(logs)
@@ -141,6 +160,7 @@ func InitServer(host string, port string) error {
 	r.StrictSlash(true)
 
 	r.HandleFunc("/", indexHandler)
+	r.HandleFunc("/heartbeat", heartbeatHandler)
 
 	// handle static files
 	r.HandleFunc(`/assets/{path:[a-zA-Z0-9=\-\/\.\_]+}`, handleStatic)
