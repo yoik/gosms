@@ -40,7 +40,8 @@ API specification
 ```json
 {
   "status": 200,
-  "message": "ok"
+  "message": "ok",
+  "uuid": "efa61f39-1f98-11e5-9eb6-d027883b1bab"
 }
 ```
 - /api/logs/ [*GET*]
@@ -65,6 +66,28 @@ API specification
       - 0 : Pending
       - 1 : Processed
       - 2 : Error
+
+- /api/query?uuid=efa61f39-1f98-11e5-9eb6-d027883b1bab [*GET*]
+    - response
+```json
+{
+  "status": 200,
+  "message": "ok",
+  "messages": [
+    {
+      "uuid": "efa61f39-1f98-11e5-9eb6-d027883b1bab",
+      "mobile": "+61400000000",
+      "body": "potato",
+      "status": 0,
+      "retries": 1,
+      "device": "test"
+    }
+  ]
+}
+```
+
+- /heartbeat
+
 
 planned features
 -------

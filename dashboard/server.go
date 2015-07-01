@@ -16,6 +16,7 @@ import (
 type SMSResponse struct {
 	Status  int    `json:"status"`
 	Message string `json:"message"`
+	UUID string    `json:"uuid"`
 }
 
 //response structure to /smsdata/
@@ -25,6 +26,17 @@ type SMSDataResponse struct {
 	Summary  []int          `json:"summary"`
 	DayCount map[string]int `json:"daycount"`
 	Messages []gosms.SMS    `json:"messages"`
+}
+
+type SMSMessageResponse struct {
+	Status   int            `json:"status"`
+	Message  string         `json:"message"`
+	Attempt gosms.SMS       `json:"attempt"`
+}
+
+type HeartbeatResponse struct {
+	Status   int            `json:"status"`
+	Message  string         `json:"message"`
 }
 
 // Cache templates
@@ -67,7 +79,7 @@ func sendSMSHandler(w http.ResponseWriter, r *http.Request) {
 	sms := &gosms.SMS{UUID: uuid.String(), Mobile: mobile, Body: message, Retries: 0}
 	gosms.EnqueueMessage(sms, true)
 
-	smsresp := SMSResponse{Status: 200, Message: "ok"}
+	smsresp := SMSResponse{Status: 200, Message: "ok", UUID: uuid.String()}
 	var toWrite []byte
 	toWrite, err := json.Marshal(smsresp)
 	if err != nil {
@@ -100,6 +112,45 @@ func getLogsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(toWrite)
 }
 
+// dumps JSON data, used by log view. Methods allowed: GET
+func getMessageHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("--- getMessageHandler")
+
+	r.ParseForm()
+	uuid := r.FormValue("uuid")
+	query := fmt.Sprintf("WHERE uuid='%v'", uuid)
+
+	attempt, _ := gosms.GetMessages(query)
+	logs := SMSMessageResponse{
+		Status:   200,
+		Message:  "ok",
+		Attempt: attempt[0],
+	}
+	var toWrite []byte
+	toWrite, err := json.Marshal(logs)
+	if err != nil {
+		log.Println(err)
+		//lets just depend on the server to raise 500
+	}
+	w.Header().Set("Content-type", "application/json")
+	w.Write(toWrite)
+}
+
+func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
+	logs := HeartbeatResponse{
+		Status:   200,
+		Message:  "ok",
+	}
+	var toWrite []byte
+	toWrite, err := json.Marshal(logs)
+	if err != nil {
+		log.Println(err)
+		//lets just depend on the server to raise 500
+	}
+	w.Header().Set("Content-type", "application/json")
+	w.Write(toWrite)
+}
+
 /* end API handlers */
 
 func InitServer(host string, port string) error {
@@ -109,6 +160,7 @@ func InitServer(host string, port string) error {
 	r.StrictSlash(true)
 
 	r.HandleFunc("/", indexHandler)
+	r.HandleFunc("/heartbeat", heartbeatHandler)
 
 	// handle static files
 	r.HandleFunc(`/assets/{path:[a-zA-Z0-9=\-\/\.\_]+}`, handleStatic)
@@ -117,6 +169,7 @@ func InitServer(host string, port string) error {
 	api := r.PathPrefix("/api").Subrouter()
 	api.Methods("GET").Path("/logs/").HandlerFunc(getLogsHandler)
 	api.Methods("POST").Path("/sms/").HandlerFunc(sendSMSHandler)
+	api.Methods("GET").Path("/query/").HandlerFunc(getMessageHandler)
 
 	http.Handle("/", r)
 
